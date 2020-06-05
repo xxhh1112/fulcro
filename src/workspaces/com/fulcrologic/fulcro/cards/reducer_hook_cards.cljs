@@ -112,7 +112,7 @@
     (button {:onClick (fn [] (comp/transact! this [(new-sale {:amount (rand-int 10)})]))} "Sell something!")
     (mapv ui-child children)))
 
-(ws/defcard floating-reducer-hook-card
+(ws/defcard reducer-hook-card
   (ct.fulcro/fulcro-card
     {::ct.fulcro/wrap-root?      true
      ::ct.fulcro/root            Top
