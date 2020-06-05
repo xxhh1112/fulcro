@@ -608,17 +608,25 @@
 (>defn process-tx-node!
   [app {:keys [::options] :as tx-node}]
   [:com.fulcrologic.fulcro.application/app ::tx-node => (s/nilable ::tx-node)]
-  (let [optimistic? (boolean (:optimistic? options))]
+  (let [optimistic?  (boolean (:optimistic? options))
+        before-state @(:com.fulcrologic.fulcro.application/state-atom app)
+        tx-hook      (ah/app-algorithm app :tx-hook)]
     (if (fully-complete? app tx-node)
       nil
-      (-> tx-node
-        (cond->>
-          optimistic? (run-actions! app)
-          (not optimistic?) (advance-actions! app))
-        (->>
-          (queue-sends! app)
-          (update-progress! app)
-          (distribute-results! app))))))
+      (let [next-tx-node (-> tx-node
+                           (cond->>
+                             optimistic? (run-actions! app)
+                             (not optimistic?) (advance-actions! app))
+                           (->>
+                             (queue-sends! app)
+                             (update-progress! app)
+                             (distribute-results! app)))
+            after-state  @(:com.fulcrologic.fulcro.application/state-atom app)]
+        (when tx-hook
+          (tx-hook app {:tx-node tx-node
+                        :before  before-state
+                        :after   after-state}))
+        next-tx-node))))
 
 (>defn requested-refreshes [app queue]
   [:com.fulcrologic.fulcro.application/app (s/coll-of ::tx-node) => set?]

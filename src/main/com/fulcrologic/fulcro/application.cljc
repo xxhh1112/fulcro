@@ -272,6 +272,7 @@
             load-mutation
             root-class
             shared
+            tx-hook
             external-config
             shared-fn] :as options}]
    (let [tx! (or submit-transaction! txn/default-tx!)]
@@ -283,6 +284,7 @@
                       :query-transform-default query-transform-default
                       :load-mutation           load-mutation}
       ::algorithms   {:com.fulcrologic.fulcro.algorithm/tx!                    tx!
+                      :com.fulcrologic.fulcro.algorithm/tx-hook                tx-hook
                       :com.fulcrologic.fulcro.algorithm/abort!                 (or abort-transaction! txn/abort!)
                       :com.fulcrologic.fulcro.algorithm/optimized-render!      (or optimized-render! mrr/render!)
                       :com.fulcrologic.fulcro.algorithm/initialize-state!      initialize-state!
