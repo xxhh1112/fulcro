@@ -6,7 +6,6 @@
     [com.fulcrologic.fulcro.application :as app]
     [com.fulcrologic.fulcro.dom :as dom :refer [div button p ul]]
     [com.fulcrologic.fulcro.mutations :as m :refer [defmutation]]
-    [taoensso.timbre :as log]
     [com.fulcrologic.fulcro.algorithms.merge :as merge]))
 
 (declare Top)
@@ -50,17 +49,16 @@
         generated-data (reduce-kv (fn [acc prop-key reducer]
                                     (assoc acc prop-key (reducer app delta))) {} @reducers)]
     ;; Now we use the indexes to update the instances that want the data
-    (log/info "Running reducer tx hook")
     (swap! state-atom
       (fn [state-map]
         (reduce
           (fn [state1 prop]
-            (let [affected-classes    (log/spy :info (prop->classes prop))
+            (let [affected-classes    (prop->classes prop)
                   affected-components (reduce (fn [acc cls] (into acc (class->components cls)))
                                         #{}
                                         affected-classes)]
               (reduce (fn [state2 c]
-                        (let [path (log/spy :info (conj (comp/get-ident c) prop))]
+                        (let [path (conj (comp/get-ident c) prop)]
                           (assoc-in state2 path (get generated-data prop))))
                 state1
                 affected-components)))
@@ -73,7 +71,7 @@
    :initial-state {:sale/id :param/id :sale/amount :param/amount}}
   (div "Sale: " amount))
 
-(def ui-sale (comp/factory Sale))
+(def ui-sale (comp/factory Sale {:keyfn :sale/id}))
 
 (defsc Child [this {:generated/keys [data]
                     :child/keys     [id name sales] :as props}]
