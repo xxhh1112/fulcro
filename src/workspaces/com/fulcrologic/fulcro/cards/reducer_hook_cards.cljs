@@ -2,13 +2,11 @@
   (:require
     [nubank.workspaces.card-types.fulcro3 :as ct.fulcro]
     [nubank.workspaces.core :as ws]
-    [com.fulcrologic.fulcro.rendering.multiple-roots-renderer :as mroot]
     [com.fulcrologic.fulcro.components :as comp :refer [defsc]]
     [com.fulcrologic.fulcro.application :as app]
-    [com.fulcrologic.fulcro.dom :as dom]
+    [com.fulcrologic.fulcro.dom :as dom :refer [div button p ul]]
     [com.fulcrologic.fulcro.mutations :as m :refer [defmutation]]
     [taoensso.timbre :as log]
-    [com.fulcrologic.fulcro.react.hooks :as hooks]
     [com.fulcrologic.fulcro.algorithms.merge :as merge]))
 
 (declare Top)
@@ -25,13 +23,18 @@
   (swap! reducers assoc prop-key reducer))
 
 ;; Side effect to add a reducer for a given generated prop
-(register-reducer! :all-known-sales/total (fn [app {:keys [after]}]
-                                            (let [sales (vals (:sale/id after))]
-                                              (reduce
-                                                (fn [acc {:sale/keys [amount]}]
-                                                  (+ acc amount))
-                                                0
-                                                sales))))
+(register-reducer! :generated/data
+  (fn [app {:keys [after]}]
+    (+ 42 (get-in after [:component/id ::top :x]))))
+
+(register-reducer! :all-known-sales/total
+  (fn [app {:keys [after]}]
+    (let [sales (vals (:sale/id after))]
+      (reduce
+        (fn [acc {:sale/keys [amount]}]
+          (+ acc amount))
+        0
+        sales))))
 
 (defn reducer-tx-hook
   "A transaction hook that looks at mounted components to see what registered props need to be re-generated, and then
@@ -68,7 +71,7 @@
   {:query         [:sale/id :sale/amount]
    :ident         :sale/id
    :initial-state {:sale/id :param/id :sale/amount :param/amount}}
-  (dom/div "Sale: " amount))
+  (div "Sale: " amount))
 
 (def ui-sale (comp/factory Sale))
 
@@ -80,15 +83,16 @@
    :initial-state {:child/id    :param/id
                    :child/sales :param/sales
                    :child/name  :param/name}}
-  (dom/div
-    (dom/p "Name:" name "with generated data" data)
-    (dom/ul
+  (div
+    (p name ", with generated data: " data)
+    (ul
       (map ui-sale sales))))
 
 (def ui-child (comp/factory Child {:keyfn :child/id}))
 
 (defn add-sale* [state-map child-id amount]
-  (merge/merge-component state-map Sale {:sale/id (random-uuid) :sale/amount amount} :append [:child/id child-id :child/sales]))
+  (merge/merge-component state-map Sale {:sale/id (random-uuid) :sale/amount amount}
+    :append [:child/id child-id :child/sales]))
 
 (defmutation new-sale [{:keys [amount]}]
   (action [{:keys [state]}]
@@ -102,10 +106,10 @@
                               {:id 2 :name "Sam" :sales [{:id 2 :amount 10.05}]}
                               {:id 3 :name "Sally" :sales [{:id 3 :amount 2.05} {:id 4 :amount 2.45}]}
                               {:id 4 :name "Barbara" :sales []}]}}
-  (dom/div
-    (dom/p "All known sales total: " total)
-    (dom/button {:onClick (fn [] (m/set-integer! this :x :value (inc x)))} (str "Bump x " x))
-    (dom/button {:onClick (fn [] (comp/transact! this [(new-sale {:amount (rand-int 10)})]))} "Sell something!")
+  (div
+    (p "All known sales total: " total)
+    (button {:onClick (fn [] (m/set-integer! this :x :value (inc x)))} (str "Bump x " x))
+    (button {:onClick (fn [] (comp/transact! this [(new-sale {:amount (rand-int 10)})]))} "Sell something!")
     (mapv ui-child children)))
 
 (ws/defcard floating-reducer-hook-card
