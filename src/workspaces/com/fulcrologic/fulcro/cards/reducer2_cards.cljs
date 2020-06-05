@@ -1,4 +1,5 @@
-(ns com.fulcrologic.fulcro.cards.reducer-hook-cards
+(ns com.fulcrologic.fulcro.cards.reducer2-cards
+  "An experiment of pushing reduced data to normalized root props."
   (:require
     [nubank.workspaces.card-types.fulcro3 :as ct.fulcro]
     [nubank.workspaces.core :as ws]
@@ -10,14 +11,12 @@
 
 (declare Top)
 
-;; Map from prop -> reducer that can generate that prop from state
+;; Map from prop -> reducer that can generate A GLOBAL prop from state
+;; This eliminates some work, and also the peppering of the value
+;; throughout state (denorm) that was prevalent in v1.
 (defonce reducers (atom {}))
 
 (defn register-reducer!
-  "Register a global prop name as something that is derived via a function of the db. The `reducer` is that function,
-   which must be a `(fn [app change] value-of-registered-prop)` where `change` is a map that will at least contain
-   a :before and :after key of the state before and after the last thing that happened.
-   Side-effecting reducers (ones that load or invoke further mutations) are still a research effort, but might be ok???"
   [prop-key reducer]
   (swap! reducers assoc prop-key reducer))
 
@@ -36,34 +35,11 @@
         sales))))
 
 (defn reducer-tx-hook
-  "A transaction hook that looks at mounted components to see what registered props need to be re-generated, and then
-   updates that data on the components that are mounted and are asking for it."
   [app {:keys [before after] :as delta}]
-  ;; 1. Fulcro has an index for all of the component classes that query for a given prop
-  (let [{::app/keys [state-atom runtime-atom]} app
-        {::app/keys [indexes]} @runtime-atom
-        {:keys [prop->classes class->components]} indexes
-        ;; 2. our reducers registry has all of the generated prop names. We could optimize this to only update the ones that
-        ;; have mounted instances...but let's leave that for later optimizations.
-        ;; For now: we'll just calculate ALL of our generated data:
+  (let [{::app/keys [state-atom]} app
         generated-data (reduce-kv (fn [acc prop-key reducer]
                                     (assoc acc prop-key (reducer app delta))) {} @reducers)]
-    ;; Now we use the indexes to update the instances that want the data
-    (swap! state-atom
-      (fn [state-map]
-        (reduce
-          (fn [state1 prop]
-            (let [affected-classes    (prop->classes prop)
-                  affected-components (reduce (fn [acc cls] (into acc (class->components cls)))
-                                        #{}
-                                        affected-classes)]
-              (reduce (fn [state2 c]
-                        (let [path (conj (comp/get-ident c) prop)]
-                          (assoc-in state2 path (get generated-data prop))))
-                state1
-                affected-components)))
-          state-map
-          (keys generated-data))))))
+    (swap! state-atom assoc ::reductions generated-data)))
 
 (defsc Sale [this {:sale/keys [amount]}]
   {:query         [:sale/id :sale/amount]
@@ -73,16 +49,15 @@
 
 (def ui-sale (comp/factory Sale {:keyfn :sale/id}))
 
-(defsc Child [this {:generated/keys [data]
-                    :child/keys     [id name sales] :as props}]
+(defsc Child [this {:child/keys [id name sales] :as props}]
   {:query         [:child/id :child/name {:child/sales (comp/get-query Sale)}
-                   :generated/data]
+                   [::reductions :generated/data]]
    :ident         :child/id
    :initial-state {:child/id    :param/id
                    :child/sales :param/sales
                    :child/name  :param/name}}
   (div
-    (p name ", with generated data: " data)
+    (p name ", with generated data: " (get props [::reductions :generated/data]))
     (ul
       (map ui-sale sales))))
 
@@ -96,8 +71,9 @@
   (action [{:keys [state]}]
     (swap! state add-sale* 2 amount)))
 
-(defsc Top [this {:keys [x children all-known-sales/total] :as props}]
-  {:query         [:x {:children (comp/get-query Child)} :all-known-sales/total]
+(defsc Top [this {:keys [x children] :as props}]
+  {:query         [:x {:children (comp/get-query Child)}
+                   [::reductions :all-known-sales/total]]
    :ident         (fn [] [:component/id ::top])
    :initial-state {:x        1
                    :children [{:id 1 :name "Joe" :sales [{:id 1 :amount 11.95}]}
@@ -105,12 +81,12 @@
                               {:id 3 :name "Sally" :sales [{:id 3 :amount 2.05} {:id 4 :amount 2.45}]}
                               {:id 4 :name "Barbara" :sales []}]}}
   (div
-    (p "All known sales total: " total)
+    (p "All known sales total: " (get props [::reductions :all-known-sales/total]))
     (button {:onClick (fn [] (m/set-integer! this :x :value (inc x)))} (str "Bump x " x))
     (button {:onClick (fn [] (comp/transact! this [(new-sale {:amount (rand-int 10)})]))} "Sell something!")
     (mapv ui-child children)))
 
-(ws/defcard reducer-hook-card
+(ws/defcard reducer2-card
   (ct.fulcro/fulcro-card
     {::ct.fulcro/wrap-root?      true
      ::ct.fulcro/root            Top
