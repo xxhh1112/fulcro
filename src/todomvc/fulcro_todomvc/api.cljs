@@ -1,6 +1,7 @@
 (ns fulcro-todomvc.api
   (:require
     [com.fulcrologic.fulcro.mutations :as m :refer [defmutation]]
+    [com.fulcrologic.fulcro.offline.durable-mutations :refer [retry?]]
     [com.fulcrologic.fulcro.algorithms.data-targeting :as dt]
     [edn-query-language.core :as eql]
     [taoensso.timbre :as log]
@@ -34,28 +35,28 @@
   (assoc-in state-map [:list/id id :ui/new-item-text] ""))
 
 (defmutation todo-new-item [{:keys [list-id id text]}]
-  (action [{:keys [state ast]}]
-    (swap! state #(-> %
-                    (create-item* id text)
-                    (add-item-to-list* list-id id)
-                    (clear-list-input-field* list-id))))
-  (error-action [{:keys [state ast]}]
-    (swap! state fns/remove-entity [:item/id id])
-    (js/alert "Failed to add item to server!"))
+  (action [{:keys [state ast] :as env}]
+    (when-not (retry? env)
+      (swap! state #(-> %
+                      (create-item* id text)
+                      (add-item-to-list* list-id id)
+                      (clear-list-input-field* list-id)))))
   (remote [_] true))
 
 (defmutation todo-check
   "Check the given item, by id."
   [{:keys [id]}]
-  (action [{:keys [state]}]
-    (swap! state set-item-checked* id true))
+  (action [{:keys [state] :as env}]
+    (when-not (retry? env)
+      (swap! state set-item-checked* id true)))
   (remote [_] true))
 
 (defmutation todo-uncheck
   "Uncheck the given item, by id."
   [{:keys [id]}]
-  (action [{:keys [state]}]
-    (swap! state set-item-checked* id false))
+  (action [{:keys [state] :as env}]
+    (when-not (retry? env)
+      (swap! state set-item-checked* id false)))
   (remote [_] true))
 
 (defn set-item-label*
@@ -65,9 +66,10 @@
 
 (defmutation commit-label-change
   "Mutation: Commit the given text as the new label for the item with id."
-  [{:keys [id text]}]
+  [{:keys [id text] :as env}]
   (action [{:keys [state]}]
-    (swap! state set-item-label* id text))
+    (when-not (retry? env)
+      (swap! state set-item-label* id text)))
   (remote [_] true))
 
 (defn remove-from-idents
@@ -76,12 +78,11 @@
   (vec (filter (fn [ident] (not= id (second ident))) vec-of-idents)))
 
 (defmutation todo-delete-item [{:keys [list-id id]}]
-  (action [{:keys [state]}]
-    (swap! state #(-> %
-                    (update-in [:list/id list-id :list/items] remove-from-idents id)
-                    (update :item/id dissoc id))))
-  (error-action [{:keys [result] :as env}]
-    (log/info "Delete cancelled!!!" result))
+  (action [{:keys [state] :as env}]
+    (when-not (retry? env)
+      (swap! state #(-> %
+                      (update-in [:list/id list-id :list/items] remove-from-idents id)
+                      (update :item/id dissoc id)))))
   (remote [_] true))
 
 (defn on-all-items-in-list
@@ -95,20 +96,23 @@
                 (apply xform s id args))) state-map item-idents)))
 
 (defmutation todo-check-all [{:keys [list-id]}]
-  (action [{:keys [state]}]
-    (swap! state on-all-items-in-list list-id set-item-checked* true))
+  (action [{:keys [state] :as env}]
+    (when-not (retry? env)
+      (swap! state on-all-items-in-list list-id set-item-checked* true)))
   (remote [_] true))
 
 (defmutation todo-uncheck-all [{:keys [list-id]}]
-  (action [{:keys [state]}]
-    (swap! state on-all-items-in-list list-id set-item-checked* false))
+  (action [{:keys [state] :as env}]
+    (when-not (retry? env)
+      (swap! state on-all-items-in-list list-id set-item-checked* false)))
   (remote [_] true))
 
 (defmutation todo-clear-complete [{:keys [list-id]}]
-  (action [{:keys [state]}]
-    (let [is-complete? (fn [item-ident] (get-in @state (conj item-ident :item/complete)))]
-      (swap! state update-in [:list/id list-id :list/items]
-        (fn [todos] (vec (remove (fn [ident] (is-complete? ident)) todos))))))
+  (action [{:keys [state] :as env}]
+    (when-not (retry? env)
+      (let [is-complete? (fn [item-ident] (get-in @state (conj item-ident :item/complete)))]
+        (swap! state update-in [:list/id list-id :list/items]
+          (fn [todos] (vec (remove (fn [ident] (is-complete? ident)) todos)))))))
   (remote [_] true))
 
 (defn current-list-id [state] (get-in state [:application :root :todos 1]))

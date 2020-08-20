@@ -1,16 +1,14 @@
 (ns fulcro-todomvc.ui
   (:require
     [com.fulcrologic.fulcro.algorithms.tempid :as tmp]
-    [com.fulcrologic.fulcro.application :as app]
     [com.fulcrologic.fulcro.components :as comp :refer [defsc]]
     [com.fulcrologic.fulcro.dom :as dom]
     [com.fulcrologic.fulcro.mutations :as mut :refer [defmutation]]
     [com.fulcrologic.fulcro.routing.dynamic-routing :as dr]
+    [com.fulcrologic.fulcro.offline.durable-mutations :refer [transact!]]
     [fulcro-todomvc.api :as api]
-    [com.fulcrologic.fulcro.networking.http-remote :as http-remote]
     [goog.object :as gobj]
-    [taoensso.timbre :as log]
-    [com.fulcrologic.fulcro.mutations :as m]))
+    [com.fulcrologic.fulcro.offline.load-cache :as load-cache]))
 
 (defn is-enter? [evt] (= 13 (.-keyCode evt)))
 (defn is-escape? [evt] (= 27 (.-keyCode evt)))
@@ -40,7 +38,7 @@
   (let [submit-edit (fn [evt]
                       (if-let [trimmed-text (trim-text (.. evt -target -value))]
                         (do
-                          (comp/transact! this [(api/commit-label-change {:id id :text trimmed-text})])
+                          (transact! this [(api/commit-label-change {:id id :text trimmed-text})])
                           (mut/set-string! this :ui/edit-text :value trimmed-text)
                           (mut/toggle! this :ui/editing))
                         (delete-item id)))]
@@ -54,7 +52,7 @@
                                  ;; The only-refresh is used to make sure the list re-renders, as
                                  ;; it does a calculated rendering of the "all checked" checkbox.
                                  (let [tx (if complete [(api/todo-uncheck {:id id})] [(api/todo-check {:id id})])]
-                                   (comp/transact! this tx {:only-refresh [(comp/get-ident this)]})))})
+                                   (transact! this tx {:only-refresh [(comp/get-ident this)]})))})
         (dom/label {:onDoubleClick (fn []
                                      (mut/toggle! this :ui/editing)
                                      (mut/set-string! this :ui/edit-text :value label))} label)
@@ -80,7 +78,7 @@
                   :onKeyDown   (fn [evt]
                                  (when (is-enter? evt)
                                    (when-let [trimmed-text (trim-text (.. evt -target -value))]
-                                     (comp/transact! component `[(api/todo-new-item ~{:list-id id
+                                     (transact! component `[(api/todo-new-item ~{:list-id id
                                                                                       :id      (tmp/tempid)
                                                                                       :text    trimmed-text})]))))
                   :onChange    (fn [evt] (mut/set-string! component :ui/new-item-text :event evt))
@@ -97,23 +95,27 @@
         (dom/li {}
           (dom/a {:className (when (or (nil? filter) (= :list.filter/none filter)) "selected")
                   :href      "#"
-                  :onClick   #(comp/transact! component `[(api/todo-filter {:filter :list.filter/none})])} "All"))
+                  :onClick   #(transact! component `[(api/todo-filter {:filter :list.filter/none})])} "All"))
         (dom/li {}
           (dom/a {:className (when (= :list.filter/active filter) "selected")
                   :href      "#/active"
-                  :onClick   #(comp/transact! component `[(api/todo-filter {:filter :list.filter/active})])} "Active"))
+                  :onClick   #(transact! component `[(api/todo-filter {:filter :list.filter/active})])} "Active"))
         (dom/li {}
           (dom/a {:className (when (= :list.filter/completed filter) "selected")
                   :href      "#/completed"
-                  :onClick   #(comp/transact! component `[(api/todo-filter {:filter :list.filter/completed})])} "Completed")))
+                  :onClick   #(transact! component `[(api/todo-filter {:filter :list.filter/completed})])} "Completed")))
       (when (pos? num-completed)
         (dom/button {:className "clear-completed"
-                     :onClick   #(comp/transact! component `[(api/todo-clear-complete {:list-id ~id})])} "Clear Completed")))))
+                     :onClick   #(transact! component `[(api/todo-clear-complete {:list-id ~id})])} "Clear Completed")))))
 
 
-(defn footer-info []
+(declare TodoList)
+
+(defn footer-info [this]
   (dom/footer :.info {}
     (dom/p {} "Double-click to edit a todo")
+    (dom/p {:style {:color "black"}}
+      (dom/button {:onClick (fn [] (load-cache/load! this [:list/id 1] TodoList []))} "Click to reload the list."))
     (dom/p {} "Created by "
       (dom/a {:href   "http://www.fulcrologic.com"
               :target "_blank"} "Fulcrologic, LLC"))
@@ -133,7 +135,7 @@
                           :list.filter/active (filterv (comp not :item/complete) items)
                           :list.filter/completed completed-todos
                           items)
-        delete-item     (fn [item-id] (comp/transact! this `[(api/todo-delete-item ~{:list-id id :id item-id})]))]
+        delete-item     (fn [item-id] (transact! this `[(api/todo-delete-item ~{:list-id id :id item-id})]))]
     (dom/div {}
       (dom/section :.todoapp {}
         (header this title)
@@ -144,13 +146,13 @@
                           :className "toggle-all"
                           :checked   all-completed?
                           :onClick   (fn [] (if all-completed?
-                                              (comp/transact! this `[(api/todo-uncheck-all {:list-id ~id})])
-                                              (comp/transact! this `[(api/todo-check-all {:list-id ~id})])))})
+                                              (transact! this `[(api/todo-uncheck-all {:list-id ~id})])
+                                              (transact! this `[(api/todo-check-all {:list-id ~id})])))})
               (dom/label {:htmlFor "toggle-all"} "Mark all as complete")
               (dom/ul :.todo-list {}
                 (map #(ui-todo-item % {:delete-item delete-item}) filtered-todos)))
             (filter-footer this num-todos num-completed))))
-      (footer-info))))
+      (footer-info this))))
 
 (def ui-todo-list (comp/factory TodoList))
 

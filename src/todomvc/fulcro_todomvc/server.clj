@@ -1,7 +1,6 @@
 (ns fulcro-todomvc.server
   (:require
     [clojure.core.async :as async]
-    [com.fulcrologic.fulcro.algorithms.do-not-use :as util]
     [com.fulcrologic.fulcro.server.api-middleware :as fmw :refer [not-found-handler wrap-api]]
     [com.wsscode.pathom.connect :as pc]
     [com.wsscode.pathom.core :as p]
@@ -122,19 +121,20 @@
 
 ;; setup for a given connect system
 (def parser
-  (p/parallel-parser
+  (p/parser
     {::p/env     {::p/reader                 [p/map-reader
-                                              pc/parallel-reader
-                                              pc/open-ident-reader]
+                                              pc/reader2
+                                              pc/open-ident-reader
+                                              p/env-placeholder-reader]
                   ::pc/mutation-join-globals [:tempids]}
-     ::p/mutate  pc/mutate-async
+     ::p/mutate  pc/mutate
      ::p/plugins [(pc/connect-plugin {::pc/register my-resolvers})
                   (p/post-process-parser-plugin p/elide-not-found)
                   p/error-handler-plugin]}))
 
 (def middleware (-> not-found-handler
                   (wrap-api {:uri    "/api"
-                             :parser (fn [query] (async/<!! (parser {} query)))})
+                             :parser (fn [query] (parser {} query))})
                   (fmw/wrap-transit-params)
                   (fmw/wrap-transit-response)
                   (wrap-resource "public")
@@ -153,9 +153,10 @@
 
   (http-server)
   (web/stop @server)
+  (tools-ns/set-refresh-dirs "src/main" "src/todomvc")
   (tools-ns/refresh-all)
 
-  (async/<!! (parser {} `[(fulcro-todomvc.api/todo-new-item {:id 2 :text "Hello"})]))
+  (parser {} `[(fulcro-todomvc.api/todo-new-item {:id 2 :text "Hello"})])
 
   @item-db
 
