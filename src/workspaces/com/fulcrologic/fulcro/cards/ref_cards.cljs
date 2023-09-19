@@ -1,12 +1,18 @@
 (ns com.fulcrologic.fulcro.cards.ref-cards
   (:require
     ["react" :as react]
+    [com.fulcrologic.fulcro.application :as app]
+    [com.fulcrologic.fulcro.data-fetch :as df]
     [nubank.workspaces.card-types.fulcro3 :as ct.fulcro]
     [nubank.workspaces.core :as ws]
+    [com.fulcrologic.fulcro.inspect.preload]
+    [com.fulcrologic.fulcro.inspect.inspect-client :as i]
+    [com.fulcrologic.fulcro.networking.http-remote :as http]
+    [com.fulcrologic.fulcro.networking.json-api-middleware :as jmw]
     [com.fulcrologic.fulcro.components :as comp :refer [defsc]]
     [com.fulcrologic.fulcro.dom :as dom :refer [div input]]
     [com.fulcrologic.fulcro.react.hooks :as hooks]
-    [com.fulcrologic.fulcro.mutations :as m]
+    [com.fulcrologic.fulcro.mutations :as m :refer [defmutation]]
     [com.fulcrologic.fulcro.dom.events :as evt]))
 
 (defsc CustomInput [this {:keys [forward-ref label value onChange] :as props}]
@@ -71,3 +77,35 @@
   (ct.fulcro/fulcro-card
     {::ct.fulcro/wrap-root? true
      ::ct.fulcro/root       StdUI}))
+
+(defonce app (app/fulcro-app {:remotes
+                              {:json
+                               (http/fulcro-http-remote {:url                 "https://date.nager.at/api/v3"
+                                                         :request-middleware  (jmw/wrap-json-request)
+                                                         :response-middleware (jmw/wrap-json-response)})}}))
+(defsc Person [this props]
+  {:query [:person/id :person/name]
+   :ident :person/id})
+
+(defsc Country [this props]
+  {:query [:country/countryCode :country/name]
+   :ident :country/countryCode})
+
+(comment
+  (i/app-started! app)
+  (df/load! app :ignored Country
+    {:params {::jmw/uri "/AvailableCountries"}
+     :remote :json})
+
+  ;; Mutations default to POST, but can be set
+  (defmutation update-person [{:person/keys [id name]}]
+    (json [env]
+      (-> env
+        (m/returning Person)
+        (jmw/using-method :put)
+        (jmw/using-uri "/person"))))
+
+  ;; Sends JSON PUT with JSON body of {'id': id, 'name': name}, expects a JSON
+  ;; response with the same (returning Person) and normalizes it into app state.
+  (comp/transact! app [(update-person {::jmw/method :put
+                                       ::jmw/uri    "/person"})]))

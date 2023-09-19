@@ -12,6 +12,7 @@
 
            com.cognitect/transit-clj  {:mvn/version "1.0.329"}
            com.cognitect/transit-cljs {:mvn/version "0.8.280"}
+           org.clojure/data.json      {:mvn/version "2.4.0"}
            com.fulcrologic/guardrails {:mvn/version "1.1.11"}
 
            org.clojure/clojure        {:mvn/version "1.10.3" :scope "provided"}
@@ -30,17 +31,17 @@
 
            :workspaces {:extra-paths ["src/workspaces"]
                         :extra-deps  {com.github.awkay/workspaces {:mvn/version "1.0.3"
-                                                                   :exclusions [com.fulcrologic/fulcro]}}}
+                                                                   :exclusions  [com.fulcrologic/fulcro]}}}
 
            :dev        {:extra-paths ["src/dev" "resources" "src/todomvc"]
                         :extra-deps  {thheller/shadow-cljs              {:mvn/version "2.14.5"}
                                       com.wsscode/pathom                {:mvn/version "2.3.1"}
                                       com.fulcrologic/fulcro-websockets {:mvn/version "3.2.0"
-                                                                         :exclusions [com.fulcrologic/fulcro]}
+                                                                         :exclusions  [com.fulcrologic/fulcro]}
                                       binaryage/devtools                {:mvn/version "1.0.6"}
                                       ring/ring-core                    {:mvn/version "1.8.1"}
                                       org.immutant/web                  {:mvn/version "2.1.10"}
                                       org.clojure/tools.namespace       {:mvn/version "1.0.0"}}}
 
-           :build      {:deps {io.github.seancorfield/build-clj {:tag "v0.6.7" :sha "22c2d09"}}
+           :build      {:deps       {io.github.seancorfield/build-clj {:tag "v0.6.7" :sha "22c2d09"}}
                         :ns-default build}}}
