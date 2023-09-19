@@ -44,8 +44,8 @@
   (:require
     #?(:clj
        [clojure.data.json :as json])
-    [clojure.set :as set]
     [clojure.string :as str]
+    [com.fulcrologic.fulcro.mutations :as m]
     [edn-query-language.core :as eql]
     [taoensso.encore :as enc]
     [taoensso.timbre :as log]))
@@ -176,7 +176,25 @@
   ([handler]
    (fn [req] (handle-json-response handler req))))
 
-(comment
-  (:query (eql/query->ast1 `[({:ignored [:country/countryCode :country/name]} {:com.fulcrologic.fulcro.networking.json-api-middleware/uri "/AvailableCountries"})]))
-  (:query (eql/query->ast1 `[{(:foo {:a 1}) [:bar]}]))
-  )
+(defn using-method
+  "Used in the remote section of the mutation. Thread the env through it. Sets the method
+   for http: :get, :post, :put, :delete
+
+   You can also set this by including a ::jmw/method parameter on your mutation in transact (which will
+   NOT flow through to the remote)"
+  [mutation-env method]
+  (let [params     (-> mutation-env :ast :params)
+        new-params (assoc params ::method method)]
+    (m/with-params mutation-env new-params)))
+
+(defn using-uri
+  "Used in the remote section of the mutation. Thread the env through it. Sets the uri for
+   the request. If relative, then the remote's URL will be prepended. If it starts with http, then
+   it will be used as-is.
+
+   You can also set this by including a ::jmw/uri parameter on your mutation in transact (which will
+   NOT flow through to the remote)"
+  [mutation-env uri]
+  (let [params     (-> mutation-env :ast :params)
+        new-params (assoc params ::uri uri)]
+    (m/with-params mutation-env new-params)))
